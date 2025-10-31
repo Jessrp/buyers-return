@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>BuyerFinder Redirect</title>
+  <script>
+    (function(){
+      const params = new URLSearchParams(location.hash.slice(1));
+      const access = params.get("access_token");
+      const refresh = params.get("refresh_token");
+
+      // 👇 This must point to your local BuyerFinder file on Android
+      const target = "file:///storage/emulated/0/Download/buyerfinder_v10_1.html";
+
+      if (access && refresh) {
+        const url = `${target}#access_token=${access}&refresh_token=${refresh}`;
+        location.replace(url);
+      } else {
+        document.body.innerHTML = "<h2>Missing Supabase tokens or invalid redirect.</h2>";
+      }
+    })();
+  </script>
+</head>
+<body style="font-family:Arial,sans-serif;text-align:center;padding:40px">
+  <h2>Redirecting back to Buyer Finder...</h2>
+  <p>If this page stays open, please close it and reopen your Buyer Finder app manually.</p>
+</body>
+</html>
