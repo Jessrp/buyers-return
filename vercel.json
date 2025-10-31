@@ -1,9 +1,5 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "buyers-return.html", "use": "@vercel/static" }
-  ],
   "routes": [
-    { "src": "/(.*)", "dest": "buyers-return.html" }
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
