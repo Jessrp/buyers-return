@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>Buyer Finder v10.2</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#0d1117;color:#fff;overflow:hidden;}
+  header{background:#161b22;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
+  header h1{font-size:1.2em;margin:0;}
+  .nav{position:fixed;bottom:0;left:0;right:0;background:#161b22;display:flex;justify-content:space-around;padding:10px 0;}
+  .nav button{background:none;border:none;color:#fff;font-size:1em;}
+  .active{color:#1f6feb;font-weight:bold;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:10px;overflow-y:auto;height:calc(100vh - 120px);}
+  .tile{background:#21262d;border-radius:10px;overflow:hidden;}
+  .tile img{width:100%;height:120px;object-fit:cover;}
+  .small{font-size:.8em;opacity:.8;}
+  .btn{background:#238636;color:#fff;padding:6px 12px;border:none;border-radius:6px;}
+  .ghost{background:none;border:1px solid #30363d;color:#fff;padding:5px 10px;border-radius:6px;}
+  .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);align-items:center;justify-content:center;z-index:5;}
+  .modal.show{display:flex;}
+  .sheet{background:#161b22;padding:15px;border-radius:10px;max-width:95%;max-height:90%;overflow-y:auto;}
+  .pill{border:1px solid #30363d;padding:5px 10px;border-radius:50px;}
+  #toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;padding:6px 12px;border-radius:8px;display:none;}
+  #bellBadge{position:absolute;top:0;right:-2px;background:red;color:white;font-size:10px;border-radius:10px;padding:2px 4px;display:none;}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header>
+  <h1 id="btnTopTitle">🔍 Buyer Finder</h1>
+  <input id="searchInput" placeholder="Search…" style="flex:1;margin-left:10px;padding:5px;border-radius:6px;border:none;outline:none;">
+  <button id="btnBell" style="position:relative;">🔔<span id="bellBadge"></span></button>
+</header>
+
+<div id="swipeWrap" style="overflow:hidden;height:calc(100vh - 120px);position:relative;">
+  <div id="paneTrack" style="display:flex;width:200%;transition:transform .25s ease;">
+    <div id="sellPane" style="width:50%;padding:0;">
+      <div id="sellGrid" class="grid"></div>
+    </div>
+    <div id="reqPane" style="width:50%;padding:0;">
+      <div id="reqGrid" class="grid"></div>
+    </div>
+  </div>
+</div>
+
+<nav class="nav">
+  <button id="navSell" class="active">Selling</button>
+  <button id="navReq">Requests</button>
+  <button id="navAdd" style="font-size:1.4em;">➕</button>
+  <button id="navProfile">Profile</button>
+  <button id="navSettings">Settings</button>
+</nav>
+
+<!-- Add-Post Modal -->
+<div class="modal" id="addPostModal">
+ <div class="sheet" style="max-width:640px">
+  <div class="row" style="justify-content:space-between">
+   <strong>Create Post</strong><button id="closeAdd" class="ghost">Close</button>
+  </div>
+  <div class="row" style="gap:10px;margin-top:10px;flex-wrap:wrap">
+   <label class="pill"><input type="radio" name="np_type" value="sale" checked> Selling</label>
+   <label class="pill"><input type="radio" name="np_type" value="request"> Requesting</label>
+  </div>
+  <input id="np_title" placeholder="Title"/>
+  <textarea id="np_desc" rows="3" placeholder="Description"></textarea>
+  <input id="np_price" placeholder="Price / Budget (USD)" inputmode="decimal"/>
+  <div class="small" style="margin:6px 0">Photos (2–5)</div>
+  <input id="np_files" type="file" accept="image/*" multiple/>
+  <div id="np_previews" class="row" style="flex-wrap:wrap;margin-top:6px"></div>
+  <div class="row" style="justify-content:space-between;margin-top:10px">
+   <div class="small">Auto-save off</div>
+   <div class="row">
+    <button id="np_clear" class="ghost">Clear</button>
+    <button id="np_save" class="btn">Post</button>
+   </div>
+  </div>
+  <div id="np_status" class="small" style="margin-top:6px;opacity:.8"></div>
+ </div>
+</div>
+
+<!— continue to Part 2 —>
+<!-- Profile Modal -->
+<div class="modal" id="profileModal">
+ <div class="sheet">
+  <div class="row" style="justify-content:space-between">
+   <strong>Profile</strong><button id="closeProfile" class="ghost">Close</button>
+  </div>
+  <div class="small" id="acctEmail" style="margin:8px 0"></div>
+  <div class="row" style="flex-wrap:wrap">
+   <button id="btnGoogle" class="btn">Continue with Google</button>
+   <button id="btnSignOut" class="ghost">Sign Out</button>
+   <button id="btnWhoAmI" class="ghost">Who Am I?</button>
+  </div>
+  <div class="small" style="margin-top:12px">
+   Connected to Supabase: <strong id="sbUrlTxt"></strong><br/>
+   Image bucket: <strong>post-images</strong>
+  </div>
+ </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal" id="settingsModal">
+ <div class="sheet">
+  <div class="row" style="justify-content:space-between">
+   <strong>Settings</strong><button id="closeSettings" class="ghost">Close</button>
+  </div>
+  <div class="row" style="flex-wrap:wrap;margin-top:10px">
+   <button id="btnDark" class="ghost">Toggle Dark/Light</button>
+   <button id="btnPremiumToggle" class="btn">Toggle Premium</button>
+  </div>
+  <div class="small" style="margin-top:12px">Premium status: <strong id="premiumStatusText">Free</strong></div>
+ </div>
+</div>
+
+<!-- Notifications Modal -->
+<div class="modal" id="notiModal">
+ <div class="sheet">
+  <div class="row" style="justify-content:space-between">
+   <strong>Notifications</strong>
+   <div class="row">
+    <button id="btnMarkSeen" class="ghost">Mark all seen</button>
+    <button id="closeNoti" class="ghost">Close</button>
+   </div>
+  </div>
+  <div id="notiList" style="margin-top:10px;max-height:50vh;overflow:auto"></div>
+ </div>
+</div>
+
+<!-- Debug Modal -->
+<div class="modal" id="debugModal">
+ <div class="sheet">
+  <div class="row" style="justify-content:space-between">
+   <strong>Debug Panel</strong><button id="closeDebug" class="ghost">Close</button>
+  </div>
+  <div class="small" id="dbgStatus" style="margin-top:8px"></div>
+  <div class="row" style="margin-top:10px;flex-wrap:wrap">
+   <button id="dbgRefresh" class="ghost">Refresh Posts</button>
+   <button id="dbgTestUpload" class="btn">Test Upload</button>
+   <button id="dbgCounts" class="ghost">Row Counts</button>
+  </div>
+  <pre id="dbgLog" style="margin-top:10px;white-space:pre-wrap;background:#0a131c;
+   border:1px solid #ffffff1a;border-radius:10px;padding:10px;max-height:40vh;overflow:auto"></pre>
+ </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ========= CONFIG ========= */
+const SUPABASE_URL  = "https://hcgwldsslzkppzgfhwws.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjZ3dsZHNzbHprcHB6Z2Zod3dzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MzE1MTYsImV4cCI6MjA3NjEwNzUxNn0.fCKpSI2UYHBlgAbus18srgkJ3FuOTAzDCgtw_lH3Yc4";
+const STORAGE_BUCKET = "post-images";
+
+/* ✅ NEW: hosted redirect helper for Google login */
+const LOCAL_FILE_URL = "https://buyers-return.vercel.app/";
+
+/* Restore session from URL hash */
+(function restoreFromHash(){
+ const h=(location.hash||"").replace(/^#/,"");
+ if(!h)return;
+ const p=Object.fromEntries(new URLSearchParams(h).entries());
+ if(p.access_token&&p.refresh_token){
+  const c=supabase.createClient(SUPABASE_URL,SUPABASE_ANON,{auth:{persistSession:true}});
+  c.auth.setSession({access_token:p.access_token,refresh_token:p.refresh_token})
+   .then(()=>{history.replaceState(null,"",location.pathname+location.search);});
+ }
+})();
+
+const $=id=>document.getElementById(id);
+let SB,user,isPremium=false;
+
+function toast(msg,ms=1600){const t=$("toast");t.textContent=msg;t.style.display="block";
+ setTimeout(()=>t.style.display="none",ms);}
+function card(p){
+ const d=document.createElement("div");
+ d.className="tile";
+ const img=(p.image_urls&&p.image_urls[0])||"https://picsum.photos/seed/demo/640/480";
+ d.innerHTML=`<img class="thumb" src="${img}"><div style="padding:8px">
+ <div style="font-weight:800">${p.title}</div>
+ <div class="small">${p.type==="request"?"Willing $":"$"}${p.price??""}</div></div>`;
+ return d;
+}
+<!-- END PART 2 -->
+/* ========= INIT SUPABASE ========= */
+SB = supabase.createClient(SUPABASE_URL,SUPABASE_ANON,{auth:{persistSession:true}});
+SB.auth.onAuthStateChange((_e,s)=>{user=s?.user||null;updateProfile();});
+SB.auth.getUser().then(r=>{user=r.data?.user||null;updateProfile();loadFeeds();startNotiPoll();});
+
+function updateProfile(){
+ $("acctEmail").textContent=user?.email||"(not signed in)";
+ $("sbUrlTxt").textContent=SUPABASE_URL;
+ refreshPremium();
+}
+
+/* ========= DEMO + FEEDS ========= */
+async function loadFeeds(){
+ const demoSell=[
+  {title:"Vintage Guitar",price:350,type:"sale",image_urls:["https://images.unsplash.com/photo-1513104890138-7c749659a591"]},
+  {title:"iPhone 13 (128GB)",price:420,type:"sale",image_urls:["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9"]},
+  {title:"Mountain Bike",price:280,type:"sale",image_urls:["https://images.unsplash.com/photo-1509395176047-4a66953fd231"]}
+ ];
+ const demoReq=[
+  {title:"Desk Chair",type:"request",price:null,image_urls:["https://images.unsplash.com/photo-1598300183320-bc4828f5605b"]},
+  {title:"Nintendo Switch",type:"request",price:null,image_urls:["https://images.unsplash.com/photo-1584270354949-1ecc6f5e89e6"]},
+  {title:"Bookshelf",type:"request",price:null,image_urls:["https://images.unsplash.com/photo-1519681393784-d120267933ba"]}
+ ];
+ await Promise.all([
+  loadType("sale",$("sellGrid"),demoSell),
+  loadType("request",$("reqGrid"),demoReq)
+ ]);
+}
+
+async function loadType(type,mount,demo){
+ try{
+  const r=await SB.from("posts").select("id,title,price,type,image_urls,created_at")
+   .eq("type",type).order("created_at",{ascending:false}).limit(60);
+  mount.innerHTML="";
+  const items=(r.error||!r.data||r.data.length===0)?demo:r.data;
+  items.forEach(p=>mount.appendChild(card(p)));
+ }catch(e){
+  mount.innerHTML="";
+  demo.forEach(p=>mount.appendChild(card(p)));
+ }
+}
+
+/* ========= SWIPE ========= */
+const track=$("paneTrack"),wrap=$("swipeWrap");
+let startX=0,curX=0,drag=false,curPane=0;
+function goPane(n){curPane=Math.max(0,Math.min(n,1));
+ track.style.transition='transform .25s ease';
+ track.style.transform=`translateX(${-curPane*100}%)`;
+ $("navSell").classList.toggle("active",curPane===0);
+ $("navReq").classList.toggle("active",curPane===1);
+}
+wrap.addEventListener("touchstart",e=>{if(e.touches.length!==1)return;drag=true;startX=e.touches[0].clientX;track.style.transition='none';});
+wrap.addEventListener("touchmove",e=>{if(!drag)return;curX=e.touches[0].clientX;
+ const pct=(-curPane*100)+((curX-startX)/wrap.clientWidth)*100;
+ track.style.transform=`translateX(${pct}%)`;});
+wrap.addEventListener("touchend",()=>{if(!drag)return;drag=false;const dx=curX-startX;
+ if(Math.abs(dx)>wrap.clientWidth*0.16){if(dx<0&&curPane<1)curPane++;if(dx>0&&curPane>0)curPane--;}
+ goPane(curPane);});
+$("navSell").onclick=()=>goPane(0);
+$("navReq").onclick=()=>goPane(1);
+$("btnTopTitle").onclick=()=>goPane(0);
+
+/* ========= MODALS ========= */
+function openModal(m){m.classList.add("show");}
+function closeModal(m){m.classList.remove("show");}
+$("navAdd").onclick=()=>openModal($("addPostModal"));
+$("closeAdd").onclick=()=>closeModal($("addPostModal"));
+$("navProfile").onclick=()=>openModal($("profileModal"));
+$("closeProfile").onclick=()=>closeModal($("profileModal"));
+$("navSettings").onclick=()=>openModal($("settingsModal"));
+$("closeSettings").onclick=()=>closeModal($("settingsModal"));
+
+/* ========= GOOGLE SIGN-IN ========= */
+$("btnGoogle").onclick=async()=>{
+ try{
+  await SB.auth.signOut();
+  const authUrl=`${SUPABASE_URL}/auth/v1/authorize?provider=google`
+   +`&redirect_to=${encodeURIComponent(LOCAL_FILE_URL)}&scope=email%20profile`;
+  window.open(authUrl,"_blank");
+ }catch(e){alert("Google sign-in error "+e);}
+};
+$("btnSignOut").onclick=async()=>{await SB.auth.signOut();user=null;updateProfile();toast("Signed out");};
+$("btnWhoAmI").onclick=async()=>{const u=await SB.auth.getUser();alert(u.data?.user?.email||"No user");};
+
+/* ========= PREMIUM ========= */
+$("btnPremiumToggle").onclick=async()=>{
+ if(!user)return alert("Sign in first");
+ const next=!isPremium;
+ const r=await SB.from("profiles").update({is_premium:next}).eq("id",user.id);
+ if(!r.error){isPremium=next;updatePremium();toast(isPremium?"Premium ON":"Premium OFF");}
+};
+async function refreshPremium(){
+ if(!user){isPremium=false;updatePremium();return;}
+ const r=await SB.from("profiles").select("is_premium").eq("id",user.id).maybeSingle();
+ isPremium=!!r.data?.is_premium;updatePremium();
+}
+function updatePremium(){
+ $("premiumStatusText").textContent=isPremium?"Premium":"Free";
+}
+
+/* ========= SEARCH + DEBUG ========= */
+$("searchInput").addEventListener("keydown",e=>{
+ if(e.key==="Enter"){
+  const v=e.target.value.trim();
+  if(v==="/debug"){openDebug();e.target.value="";return;}
+  doSearch(v);
+ }
+});
+async function doSearch(q){
+ const r=await SB.from("posts")
+  .select("title,description,type,price,image_urls,created_at")
+  .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
+  .order("created_at",{ascending:false}).limit(40);
+ $("sellGrid").innerHTML="";
+ (r.data||[]).forEach(p=>$("sellGrid").appendChild(card(p)));
+ goPane(0);
+}
+
+/* ========= ADD POST ========= */
+let npFiles=[];
+$("np_files").onchange=e=>{
+ npFiles=[...e.target.files].slice(0,5);
+ $("np_previews").innerHTML="";
+ npFiles.forEach(f=>{
+  const im=new Image();im.style.width="80px";im.style.height="60px";im.style.margin="3px";
+  const fr=new FileReader();fr.onload=()=>im.src=fr.result;fr.readAsDataURL(f);
+  $("np_previews").appendChild(im);
+ });
+};
+$("np_clear").onclick=()=>{
+ $("np_title").value=$("np_desc").value=$("np_price").value="";
+ $("np_previews").innerHTML="";
+ npFiles=[];
+};
+$("np_save").onclick=async()=>{
+ if(!user)return alert("Sign in first");
+ const type=document.querySelector("input[name='np_type']:checked").value;
+ const title=$("np_title").value.trim();
+ const desc=$("np_desc").value.trim();
+ const price=$("np_price").value?Number($("np_price").value):null;
+ if(!title)return alert("Title required");
+ $("np_status").textContent="Posting…";
+ const urls=[];
+ for(let i=0;i<npFiles.length;i++){
+  const f=npFiles[i];
+  const safe=(f.name||`photo${i}.jpg`).replace(/[^a-z0-9._-]/gi,"_");
+  const path=`${user.id}/post-${Date.now()}-${safe}`;
+  const up=await SB.storage.from(STORAGE_BUCKET).upload(path,f,{upsert:true});
+  if(!up.error){
+   const pub=SB.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+   urls.push(pub.data.publicUrl);
+  }
+ }
+ const payload={user_id:user.id,type,title,description:desc,price,image_urls:urls,created_at:new Date().toISOString()};
+ const ins=await SB.from("posts").insert([payload]).select().single();
+ if(!ins.error){
+  try{await SB.rpc("find_matches_for_post",{new_post:{id:ins.data.id,...payload}});}catch(_){}
+  toast("Post added!");
+  closeModal($("addPostModal"));
+  loadFeeds();
+ }
+ $("np_status").textContent="";
+};
+
+/* ========= NOTIFICATIONS ========= */
+async function pollNoti(){
+ if(!user)return;
+ const r=await SB.from("notifications").select("id,message,seen,created_at")
+  .eq("user_id",user.id).order("created_at",{ascending:false}).limit(40);
+ if(!r.error){
+  const unseen=r.data.filter(n=>!n.seen);
+  const b=$("bellBadge");
+  if(unseen.length>0){b.style.display="inline-block";b.textContent=unseen.length;}
+  else b.style.display="none";
+  renderNoti(r.data);
+ }
+}
+function startNotiPoll(){setInterval(pollNoti,30000);}
+function renderNoti(items){
+ const l=$("notiList");
+ if(!items||items.length===0){l.innerHTML="<div>No notifications yet.</div>";return;}
+ l.innerHTML="";
+ items.forEach(n=>{
+  const d=document.createElement("div");
+  d.className="tile";
+  d.innerHTML=`<div style='padding:8px'><b>${n.message||"New match"}</b>
+   <div class='small'>${new Date(n.created_at).toLocaleString()}</div></div>`;
+  l.appendChild(d);
+ });
+}
+$("btnBell").onclick=()=>openModal($("notiModal"));
+$("closeNoti").onclick=()=>closeModal($("notiModal"));
+$("btnMarkSeen").onclick=async()=>{
+ if(!user)return;
+ await SB.from("notifications").update({seen:true}).eq("user_id",user.id).eq("seen",false);
+ pollNoti();
+};
+
+/* ========= DEBUG ========= */
+function openDebug(){
+ $("dbgLog").textContent=`User: ${user?.email||"none"}\nSupabase: ${SUPABASE_URL}`;
+ openModal($("debugModal"));
+}
+$("closeDebug").onclick=()=>closeModal($("debugModal"));
+$("dbgRefresh").onclick=()=>loadFeeds();
+$("dbgCounts").onclick=async()=>{
+ const p=await SB.from("posts").select("*",{count:"exact",head:true});
+ $("dbgLog").textContent+=`\nPosts count: ${p.count}`;
+};
+</script>
+</body>
+</html>
